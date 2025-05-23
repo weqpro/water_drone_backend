@@ -21,14 +21,15 @@ def get_or_create_queue(drone_id: int) -> Queue:
     return queues[drone_id]
 
 
-@app.get("/get_update/{drone_id}")
-async def get_update(drone_id: int) -> Update:
+@app.get("/get_update/{drone_id}", response_model=Update)
+async def get_update(drone_id: int):
     if drone_id not in queues:
         return Update(
             err=Errors.DRONE_NOT_FOUND,
             time=datetime.datetime.now().time(),
             type_=UpdateTypes.VOID,
         )
+
     try:
         update = await wait_for(queues[drone_id].get(), timeout=5.0)
         return update
@@ -40,8 +41,8 @@ async def get_update(drone_id: int) -> Update:
         )
 
 
-@app.get("/new/{drone_id}")
-async def new_drone(drone_id: int) -> Update:
+@app.get("/new/{drone_id}", response_model=Update)
+async def new_drone(drone_id: int):
     get_or_create_queue(drone_id)
     return Update(
         err=Errors.OK,
@@ -51,27 +52,31 @@ async def new_drone(drone_id: int) -> Update:
 
 
 @app.post("/send/path/{drone_id}")
-async def send_path_update(drone_id: int, data: PathUpdateRequest):
+async def send_path_update(drone_id: int, payload: PathUpdateRequest):
     queue = get_or_create_queue(drone_id)
+    now = datetime.datetime.now().time()
+
     update = PathUpdate(
         err=Errors.OK,
-        time=datetime.datetime.now().time(),
+        time=now,
         type_=UpdateTypes.AUTO_PILOT_PATH,
-        points=data.points,
+        points=payload.points,
     )
     await queue.put(update)
     return {"status": "queued", "type": update.type_}
 
 
 @app.post("/send/manual/{drone_id}")
-async def send_manual_update(drone_id: int, data: ManualUpdateRequest):
+async def send_manual_update(drone_id: int, payload: ManualUpdateRequest):
     queue = get_or_create_queue(drone_id)
+    now = datetime.datetime.now().time()
+
     update = MovementUpdate(
         err=Errors.OK,
-        time=datetime.datetime.now().time(),
+        time=now,
         type_=UpdateTypes.MANUAL,
-        movement=data.movement,
-        rotation=data.rotation,
+        movement=payload.movement,
+        rotation=payload.rotation,
     )
     await queue.put(update)
     return {"status": "queued", "type": update.type_}
